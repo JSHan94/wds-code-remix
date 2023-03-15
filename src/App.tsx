@@ -16,6 +16,7 @@ export const App: React.FunctionComponent = () => {
     const init = async () => {
       const temp = createClient();
       await temp.onload();
+      console.log('client', temp)
 
       setClient(temp);
       setConnection(true);

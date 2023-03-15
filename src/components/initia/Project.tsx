@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Form, InputGroup, Button } from 'react-bootstrap';
+import React, { useEffect, useState } from 'react';
+import { Button, Form, InputGroup } from 'react-bootstrap';
 import { FaSyncAlt } from 'react-icons/fa';
+
 import { Compiler } from './Compiler';
+
 import axios from 'axios';
 import JSZip from 'jszip';
 import wrapPromise from '../../utils/wrapPromise';
@@ -10,38 +12,26 @@ import { COMPILER_API_ENDPOINT } from '../../const/endpoint';
 import { Client } from '@remixproject/plugin';
 import { Api } from '@remixproject/plugin-utils';
 import { IRemixApi } from '@remixproject/plugin-api';
-import { Near, providers } from 'near-api-js';
-import { Provider } from './WalletRpcProvider';
 import { log } from '../../utils/logger';
 
 interface InterfaceProps {
-  walletRpcProvider: providers.WalletRpcProvider | undefined;
-  providerProxy: Provider | undefined;
-  nearConfig: Near | undefined;
+  wallet: string;
+  account: string;
   client: Client<Api, Readonly<IRemixApi>>;
-  account: { address: string; pubKey: string };
+  dapp: any;
 }
 
-const PROJECT_TEMPLATE_FILETYPE = [
-  { label: 'Rust', value: 'rs' },
-  { label: 'AssemblyScript', value: 'as' },
-  { label: 'TypeScript', value: 'ts' },
-  { label: 'JavaScript', value: 'js' },
-];
-
 export const Project: React.FunctionComponent<InterfaceProps> = ({
+  wallet,
   account,
-  walletRpcProvider,
-  providerProxy,
-  nearConfig,
+  dapp,
   client,
 }) => {
   const [projectName, setProjectName] = useState<string>('noname');
   const [projectList, setProjectList] = useState<string[]>([]);
   const [compileTarget, setCompileTarget] = useState<string>('');
-  const [lang, setLang] = useState<string>('rs');
-  const [template, setTemplate] = useState<string>('as_counter');
-  const templateList = ['as_counter', 'rs_counter', 'js_counter', 'ts_counter', 'rs_ft', 'rs_nft'];
+  const [template, setTemplate] = useState<string>('hello_blockchain');
+  const templateList = ['hello_blockchain', 'ticket', 'hello_prover', 'marketplace'];
 
   useEffect(() => {
     getList();
@@ -50,7 +40,7 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
   const getList = async () => {
     const list = await getProjectList();
     setProjectList(list);
-    list.length > 0 && setCompileTarget(list[0]);
+    list?.length > 0 && setCompileTarget(list[0]);
   };
 
   const wrappedGetList = () => wrapPromise(getList(), client);
@@ -69,45 +59,31 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
 
   const createProject = async () => {
     sendCustomEvent('new_project', {
-      event_category: 'near',
+      event_category: 'aptos',
       method: 'new_project',
     });
     if (await wrappedIsExists(projectName)) {
       await client.terminal.log({
         type: 'error',
-        value: 'The folder "near/' + projectName + '" already exists',
+        value: 'The folder "aptos/' + projectName + '" already exists',
       });
       return;
     }
 
     try {
-      const path = 'browser/near/' + projectName;
-      if (lang === 'rs') {
-        await client.fileManager.mkdir(path + '/src');
-        await client.fileManager.writeFile(path + '/Cargo.toml', '');
-      } else if (lang === 'as') {
-        await client.fileManager.mkdir(path + '/assembly');
-        await client.fileManager.writeFile(path + '/assembly/index.ts', '');
-      } else if (lang === 'ts') {
-        await client.fileManager.writeFile(path + '/src/contract.ts', '');
-        await client.fileManager.writeFile(path + '/package.json', '');
-        await client.fileManager.writeFile(path + '/babel.config.json', '');
-        await client.fileManager.writeFile(path + '/tsconfig.json', '');
-      } else if (lang === 'js') {
-        await client.fileManager.writeFile(path + '/src/contract.js', '');
-        await client.fileManager.writeFile(path + '/package.json', '');
-        await client.fileManager.writeFile(path + '/babel.config.json', '');
-      }
+      const path = 'browser/aptos/' + projectName;
+      await client?.fileManager.mkdir(path + '/sources');
+      await client?.fileManager.writeFile(path + '/Move.toml', '');
       wrappedGetList();
     } catch (e: any) {
-      await client.terminal.log({ type: 'error', value: e.message });
+      client.terminal.log(e.message);
     }
   };
   const wrappedCreateProject = () => wrapPromise(createProject(), client);
 
   const getProjectList = async () => {
     try {
-      const list = await client.fileManager.readdir('browser/near/');
+      const list = await client?.fileManager.readdir('browser/aptos/');
       return Object.keys(list || []);
     } catch (e) {
       log.error(e);
@@ -119,7 +95,7 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
 
   const isExists = async (dir: string) => {
     try {
-      log.debug(await client.fileManager.readdir('browser/near/' + dir));
+      log.debug(await client.fileManager.readdir('browser/aptos/' + dir));
       return true;
     } catch (e) {
       log.error(e);
@@ -131,14 +107,14 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
 
   const createTemplate = async () => {
     sendCustomEvent('create_template', {
-      event_category: 'near',
+      event_category: 'aptos',
       method: 'create_template',
     });
 
     if (await wrappedIsExists(template)) {
       await client.terminal.log({
         type: 'error',
-        value: 'The folder "near/' + template + '" already exists',
+        value: `The folder "aptos/${template} already exists`,
       });
       return;
     }
@@ -146,7 +122,7 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
     const res = await axios.request({
       method: 'GET',
       url:
-        `${COMPILER_API_ENDPOINT}/s3Proxy?bucket=code-template&fileKey=near/` + template + '.zip',
+        `${COMPILER_API_ENDPOINT}/s3Proxy?bucket=code-template&fileKey=aptos/` + template + '.zip',
       responseType: 'arraybuffer',
       responseEncoding: 'null',
     });
@@ -157,28 +133,22 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
     let content: any;
     try {
       Object.keys(zip.files).map(async (key) => {
+        log.debug(`@@@ key=${key}`);
         if (zip.files[key].dir) {
-          await client.fileManager.mkdir('browser/near/' + key);
+          await client?.fileManager.mkdir('browser/aptos/' + key);
         } else if (!key.startsWith('_') && key !== template + '/.DS_Store') {
           content = await zip.file(key)?.async('string');
-          await client.fileManager.writeFile('browser/near/' + key, content);
+          await client?.fileManager.writeFile('browser/aptos/' + key, content);
         }
       });
       await wrappedGetList();
-      await client.terminal.log({
-        type: 'info',
-        value: template + ' is created successfully.',
-      });
+      await client.terminal.log({ type: 'info', value: template + ' is created successfully.' });
     } catch (e) {
       log.error(e);
     }
   };
 
   const wrappedCreateTemplate = () => wrapPromise(createTemplate(), client);
-
-  const handleChange = (e: { target: { value: React.SetStateAction<string> } }) => {
-    setLang(e.target.value);
-  };
 
   return (
     <div>
@@ -187,23 +157,7 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
           <Form.Text className="text-muted" style={mb4}>
             <small>NEW PROJECT</small>
           </Form.Text>
-          <InputGroup style={mb4}>
-            {PROJECT_TEMPLATE_FILETYPE.map(({ label, value }, idx) => {
-              return (
-                <Form.Check
-                  inline
-                  label={label}
-                  name={'group1'}
-                  type={'radio'}
-                  id={`radio${idx}`}
-                  value={value}
-                  onChange={handleChange}
-                  key={`radio${idx}`}
-                />
-              );
-            })}
-          </InputGroup>
-          <InputGroup style={mt8}>
+          <InputGroup>
             <Form.Control type="text" placeholder="Project Name" size="sm" onChange={setProject} />
             <Button variant="success" size="sm" onClick={wrappedCreateProject}>
               <small>Create</small>
@@ -243,7 +197,7 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
               value={compileTarget}
               onChange={setTarget}
             >
-              {projectList.map((projectName, idx) => {
+              {projectList?.map((projectName, idx) => {
                 return (
                   <option value={projectName} key={idx}>
                     {projectName}
@@ -256,14 +210,7 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
       </Form>
 
       <hr />
-      <Compiler
-        compileTarget={compileTarget}
-        account={account}
-        walletRpcProvider={walletRpcProvider}
-        providerProxy={providerProxy}
-        nearConfig={nearConfig}
-        client={client}
-      />
+      <Compiler compileTarget={compileTarget} accountID={account} dapp={dapp} client={client} />
     </div>
   );
 };

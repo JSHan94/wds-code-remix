@@ -1,10 +1,6 @@
 import RefreshButton from './common/RefreshButton';
 import { FaChevronLeft } from 'react-icons/fa';
-import { Connect as NearConnect } from './near/Connect';
-import { Connect as CeloConnect } from './celo/Connect';
-import { Connect as KlayConnect } from './klaytn/Connect';
-import { Connect as AptosConnect } from './aptos/Connect';
-import { Connect as JunoConnect } from './juno/Connect';
+import { Connect as InitiaConnect } from './initia/Connect';
 import { Client } from '@remixproject/plugin';
 import { Api } from '@remixproject/plugin-utils';
 import { IRemixApi } from '@remixproject/plugin-api';
@@ -65,16 +61,8 @@ export const ChainConnectContainer: FunctionComponent<InterfaceProps> = ({
 
   const ChainConnect = (props: { chain: string }) => {
     switch (props.chain) {
-      case 'Near':
-        return <NearConnect client={client} />;
-      case 'Celo':
-        return <CeloConnect client={client} />;
-      case 'Klaytn':
-        return <KlayConnect client={client} />;
       case 'Aptos':
-        return <AptosConnect client={client} />;
-      case 'Juno':
-        return <JunoConnect client={client} />;
+        return <InitiaConnect client={client} />;
       default:
         return <></>;
     }

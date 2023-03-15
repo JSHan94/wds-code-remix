@@ -21,8 +21,8 @@ export const Main: FunctionComponent<InterfaceProps> = ({ client }) => {
       ) : (
         <div>
           <ChainSelectButtonContainer setChain={setChain} client={client} />
-          <DocumentationButton />
-          <MakeAIssueButton />
+          {/* <DocumentationButton /> */}
+          {/* <MakeAIssueButton /> */}
         </div>
       )}
     </div>

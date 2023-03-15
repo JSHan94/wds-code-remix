@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { WelldoneConnect } from './WelldoneConnect';
 import { Project } from './Project';
-// import { WalletRpcProvider } from 'near-api-js/lib/providers/wallet-rpc-provider';
 import { Client } from '@remixproject/plugin';
 import { Api } from '@remixproject/plugin-utils';
 import { IRemixApi } from '@remixproject/plugin-api';
@@ -14,7 +13,7 @@ interface InterfaceProps {
 export const Connect: React.FunctionComponent<InterfaceProps> = ({ client }) => {
   const [wallet, setWallet] = useState('');
   const [account, setAccount] = useState('');
-  const [dapp, setDapp] = useState(null); //useState(WalletRpcProvider());
+  const [dapp, setDapp] = useState(null);
   const [active, setActive] = useState<boolean>(false);
 
   return (

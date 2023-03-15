@@ -15,20 +15,11 @@ import {
   COMPILER_APTOS_COMPILE_COMPLETED_V1,
   COMPILER_APTOS_COMPILE_ERROR_OCCURRED_V1,
   COMPILER_APTOS_COMPILE_LOGGED_V1,
-  COMPILER_APTOS_PROVE_COMPLETED_V1,
-  COMPILER_APTOS_PROVE_ERROR_OCCURRED_V1,
-  COMPILER_APTOS_PROVE_LOGGED_V1,
   CompilerAptosCompileCompletedV1,
   CompilerAptosCompileErrorOccurredV1,
   CompilerAptosCompileLoggedV1,
-  CompilerAptosProveCompletedV1,
-  CompilerAptosProveErrorOccurredV1,
-  CompilerAptosProveLoggedV1,
   REMIX_APTOS_COMPILE_REQUESTED_V1,
-  REMIX_APTOS_PROVE_REQUESTED_V1,
   RemixAptosCompileRequestedV1,
-  RemixAptosProveRequestedV1,
-  reqId,
 } from 'wds-event';
 
 import { APTOS_COMPILER_CONSUMER_ENDPOINT, COMPILER_API_ENDPOINT } from '../../const/endpoint';
@@ -70,7 +61,6 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
   dapp,
 }) => {
   const [fileNames, setFileNames] = useState<string[]>([]);
-  const [proveLoading, setProveLoading] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [compileError, setCompileError] = useState<Nullable<string>>(null);
   const [atAddress, setAtAddress] = useState<string>('');
@@ -94,6 +84,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
   const findArtifacts = async () => {
     let artifacts = {};
     try {
+      await client.terminal.log({ value: compileTarget, type: 'info' });
       artifacts = await client?.fileManager.readdir('browser/' + compileTarget + '/out');
     } catch (e) {
       log.info(`no out folder`);
@@ -108,26 +99,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
     client.call('editor', 'clearAnnotations');
   };
 
-  const requestProve = async () => {
-    if (proveLoading) {
-      await client.terminal.log({ value: 'Server is working...', type: 'log' });
-      return;
-    }
-    const projFiles = await FileUtil.allFilesForBrowser(client, compileTarget);
-    log.debug(`@@@ prove projFiles`, projFiles);
-    const buildFileExcluded = projFiles.filter((f) => !f.path.startsWith(`${compileTarget}/out`));
-    log.debug(`@@@ prove buildFileExcluded`, buildFileExcluded);
-    if (isEmptyList(buildFileExcluded)) {
-      return;
-    }
-
-    const blob = await generateZip(buildFileExcluded);
-
-    await wrappedProve(blob);
-  };
-
   const wrappedRequestCompile = () => wrapPromise(requestCompile(), client);
-  const wrappedRequestProve = () => wrapPromise(requestProve(), client);
 
   const createFile = (code: string, name: string) => {
     const blob = new Blob([code], { type: 'text/plain' });
@@ -178,6 +150,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
         });
       }
 
+      // connect error
       socket.on('connect_error', function (err) {
         // handle server error here
         log.debug('Error connecting to server');
@@ -185,6 +158,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
         socket.disconnect();
       });
 
+      // get compile error
       socket.on(
         COMPILER_APTOS_COMPILE_ERROR_OCCURRED_V1,
         async (data: CompilerAptosCompileErrorOccurredV1) => {
@@ -203,6 +177,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
         },
       );
 
+      // get compile log
       socket.on(COMPILER_APTOS_COMPILE_LOGGED_V1, async (data: CompilerAptosCompileLoggedV1) => {
         log.debug(
           `${RCV_EVENT_LOG_PREFIX} ${COMPILER_APTOS_COMPILE_LOGGED_V1} data=${stringify(data)}`,
@@ -214,10 +189,12 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
         await client.terminal.log({ value: stripAnsi(data.logMsg), type: 'info' });
       });
 
+      // get compiled file
       socket.on(
         COMPILER_APTOS_COMPILE_COMPLETED_V1,
         async (data: CompilerAptosCompileCompletedV1) => {
-          log.debug(
+          await client.terminal.log({ value: data, type: 'info' });
+          console.debug(
             `${RCV_EVENT_LOG_PREFIX} ${COMPILER_APTOS_COMPILE_COMPLETED_V1} data=${stringify(
               data,
             )}`,
@@ -226,7 +203,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
             return;
           }
 
-          const bucket = 'aptos-origin-code';
+          const bucket = 'remix-initia';
           const fileKey = `${address}/${timestamp}/out_${address}_${timestamp}_move.zip`;
           const res = await axios.request({
             method: 'GET',
@@ -250,43 +227,6 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
           let moduleWrappers: ModuleWrapper[] = [];
 
           log.debug(zip.files);
-
-          // ABI
-          // await Promise.all(
-          //   Object.keys(zip.files).map(async (key) => {
-          //     if (key.includes('.abi')) {
-          //       let content = await zip.file(key)?.async('arraybuffer');
-          //       log.debug(content)
-          //       log.debug((new TextDecoder().decode(content)))
-
-          //       await client?.fileManager.writeFile(
-          //         'browser/' + compileTarget + '/out/abi/' + FileUtil.extractFilename(key),
-          //         (new TextDecoder().decode(content))
-          //       );
-          //     }
-          //   }),
-          // );
-
-          await Promise.all(
-            Object.keys(zip.files).map(async (key) => {
-              if (key.includes('package-metadata.bcs')) {
-                let content = await zip.file(key)?.async('blob');
-                content = content?.slice(0, content.size) ?? new Blob();
-                metaData64 = await readFile(new File([content], key));
-                metaDataHex = Buffer.from(metaData64, 'base64').toString('hex');
-                log.debug(`metadataFile_Base64=${metaData64}`);
-                try {
-                  await client?.fileManager.writeFile(
-                    'browser/' + compileTarget + '/out/' + FileUtil.extractFilename(key),
-                    metaData64,
-                  );
-                } catch (e) {
-                  log.error(e);
-                  setLoading(false);
-                }
-              }
-            }),
-          );
 
           await Promise.all(
             Object.keys(zip.files).map(async (filepath) => {
@@ -373,110 +313,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
     }
   };
 
-  const sendProveReq = async (blob: Blob) => {
-    setProveLoading(true);
-
-    const address = accountID;
-    const timestamp = Date.now().toString();
-    try {
-      // socket connect
-      let socket: Socket;
-      if (STAGE === PROD) {
-        socket = io(APTOS_COMPILER_CONSUMER_ENDPOINT);
-      } else {
-        socket = io(APTOS_COMPILER_CONSUMER_ENDPOINT, {
-          transports: ['websocket'],
-        });
-      }
-
-      socket.on('connect_error', function (err) {
-        // handle server error here
-        log.debug('Error connecting to server');
-        setProveLoading(false);
-        socket.disconnect();
-      });
-
-      socket.on(
-        COMPILER_APTOS_PROVE_ERROR_OCCURRED_V1,
-        async (data: CompilerAptosProveErrorOccurredV1) => {
-          log.debug(
-            `${RCV_EVENT_LOG_PREFIX} ${COMPILER_APTOS_PROVE_ERROR_OCCURRED_V1} data=${stringify(
-              data,
-            )}`,
-          );
-
-          if (data.id !== reqId(address, timestamp)) {
-            return;
-          }
-          await client.terminal.log({ value: stripAnsi(data.errMsg), type: 'error' });
-
-          setProveLoading(false);
-          socket.disconnect();
-        },
-      );
-
-      socket.on(COMPILER_APTOS_PROVE_LOGGED_V1, async (data: CompilerAptosProveLoggedV1) => {
-        log.debug(
-          `${RCV_EVENT_LOG_PREFIX} ${COMPILER_APTOS_PROVE_LOGGED_V1} data=${stringify(data)}`,
-        );
-        if (data.id !== reqId(address, timestamp)) {
-          return;
-        }
-
-        await client.terminal.log({ value: stripAnsi(data.logMsg), type: 'info' });
-      });
-
-      socket.on(COMPILER_APTOS_PROVE_COMPLETED_V1, async (data: CompilerAptosProveCompletedV1) => {
-        log.debug(
-          `${RCV_EVENT_LOG_PREFIX} ${COMPILER_APTOS_PROVE_COMPLETED_V1} data=${stringify(data)}`,
-        );
-        if (data.id !== reqId(address, timestamp)) {
-          return;
-        }
-        socket.disconnect();
-        setProveLoading(false);
-      });
-
-      const formData = new FormData();
-      formData.append('address', address || 'noaddress');
-      formData.append('timestamp', timestamp.toString() || '0');
-      formData.append('fileType', 'move');
-      formData.append('zipFile', blob || '');
-
-      const res = await axios.post(COMPILER_API_ENDPOINT + '/s3Proxy/src', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          Accept: 'application/json',
-        },
-      });
-
-      if (res.status !== 201) {
-        log.error(`src upload fail. address=${address}, timestamp=${timestamp}`);
-        socket.disconnect();
-        setLoading(false);
-        return;
-      }
-
-      const remixAptosProveRequestedV1: RemixAptosProveRequestedV1 = {
-        id: compileId(address, timestamp),
-        address: address || 'noaddress',
-        timestamp: timestamp.toString() || '0',
-        fileType: 'move',
-      };
-      socket.emit(REMIX_APTOS_PROVE_REQUESTED_V1, remixAptosProveRequestedV1);
-      log.debug(
-        `${SEND_EVENT_LOG_PREFIX} ${REMIX_APTOS_PROVE_REQUESTED_V1} data=${stringify(
-          remixAptosProveRequestedV1,
-        )}`,
-      );
-    } catch (e) {
-      setProveLoading(false);
-      log.error(e);
-    }
-  };
-
   const wrappedCompile = (blob: Blob) => wrapPromise(sendCompileReq(blob), client);
-  const wrappedProve = (blob: Blob) => wrapPromise(sendProveReq(blob), client);
 
   const getExtensionOfFilename = (filename: string) => {
     const _fileLen = filename.length;
@@ -646,7 +483,6 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
   const prepareModules = async () => {
     const artifactPaths = await findArtifacts();
 
-    setMetaDataBase64('');
     setModuleBase64s([]);
     setFileNames([]);
 
@@ -654,19 +490,9 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
       return [];
     }
 
-    let metaData64 = '';
     let metaDataHex = '';
     let filenames: string[] = [];
     let moduleWrappers: ModuleWrapper[] = [];
-
-    await Promise.all(
-      artifactPaths.map(async (path) => {
-        if (path.includes('package-metadata.bcs')) {
-          metaData64 = await client?.fileManager.readFile('browser/' + path);
-          metaDataHex = Buffer.from(metaData64, 'base64').toString('hex');
-        }
-      }),
-    );
 
     await Promise.all(
       artifactPaths.map(async (path) => {
@@ -695,7 +521,6 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
 
     setFileNames([...filenames]);
     setModuleBase64s([...moduleWrappers.map((m) => m.module)]);
-    setMetaDataBase64(metaData64);
 
     return filenames;
   };
@@ -745,7 +570,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
       <div className="d-grid gap-2">
         <Button
           variant="primary"
-          disabled={accountID === '' || proveLoading || loading}
+          disabled={accountID === '' || loading}
           onClick={async () => {
             await wrappedRequestCompile();
           }}
@@ -754,18 +579,6 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
         >
           <FaSyncAlt className={loading ? 'fa-spin' : ''} />
           <span> Compile</span>
-        </Button>
-
-        <Button
-          variant="warning"
-          disabled={accountID === '' || proveLoading || loading}
-          onClick={async () => {
-            await wrappedRequestProve();
-          }}
-          className="btn btn-primary btn-block d-block w-100 text-break remixui_disabled mb-1 mt-3"
-        >
-          <FaSyncAlt className={proveLoading ? 'fa-spin' : ''} />
-          <span> Prove</span>
         </Button>
 
         {fileNames.map((filename, i) => (

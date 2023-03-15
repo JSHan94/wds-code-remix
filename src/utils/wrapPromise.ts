@@ -15,19 +15,6 @@ export default async function wrapPromise(promise: Promise<any>, client: any) {
       result = e;
     },
   );
-
-  // 컴포넌트 단으로 상태를 전파시킨다면 쓸 코드
-  // return {
-  //   read() {
-  //     switch (status) {
-  //       case 'pending':
-  //         throw suspender;
-  //       case 'error':
-  //         throw result;
-  //       default:
-  //         return result;
-  //     }
-  //   },
-  // };
+  
   return result;
 }
