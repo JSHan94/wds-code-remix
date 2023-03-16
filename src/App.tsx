@@ -26,7 +26,9 @@ export const App: React.FunctionComponent = () => {
   }, []);
 
   return (
+    
     <div className="App">
+      <>hello world </>
       <Container>{client && <Main client={client} />}</Container>
     </div>
   );

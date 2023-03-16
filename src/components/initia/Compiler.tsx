@@ -40,8 +40,6 @@ import { Types } from 'aptos';
 interface ModuleWrapper {
   path: string;
   module: string;
-  moduleNameHex: string;
-  order: number;
 }
 
 const RCV_EVENT_LOG_PREFIX = `[==> EVENT_RCV]`;
@@ -68,7 +66,6 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
   const [deployedContract, setDeployedContract] = useState<string>('');
 
   const [moduleBase64s, setModuleBase64s] = useState<string[]>([]);
-  const [metaData64, setMetaDataBase64] = useState<string>('');
 
   const [modules, setModules] = useState<any[]>([]);
   const [targetModule, setTargetModule] = useState<string>('');
@@ -128,6 +125,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
 
     return zip.generateAsync({ type: 'blob' });
   };
+
 
   const sendCompileReq = async (blob: Blob) => {
     setCompileError(null);
@@ -203,16 +201,17 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
             return;
           }
 
-          const bucket = 'remix-initia';
           const fileKey = `${address}/${timestamp}/out_${address}_${timestamp}_move.zip`;
           const res = await axios.request({
             method: 'GET',
-            url: `${COMPILER_API_ENDPOINT}/s3Proxy?bucket=${bucket}&fileKey=${fileKey}`,
+            url: `${COMPILER_API_ENDPOINT}/s3Proxy?fileKey=${fileKey}`,
             responseType: 'arraybuffer',
             responseEncoding: 'null',
           });
-
+          const cc  = res.data as Uint8Array
+          console.log("SIBONG1 res.data : ",cc.toString() , " fileKey : ", fileKey);
           const zip = await new JSZip().loadAsync(res.data);
+          console.log("SIBONG2")
           try {
             await client?.fileManager.mkdir('browser/' + compileTarget + '/out');
           } catch (e) {
@@ -220,13 +219,12 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
             setLoading(false);
             return;
           }
+          console.log("SIBONG3")
 
-          let metaData64 = '';
-          let metaDataHex = '';
-          let filenames: string[] = [];
-          let moduleWrappers: ModuleWrapper[] = [];
+          const filenames: string[] = [];
+          const moduleWrappers: ModuleWrapper[] = [];
 
-          log.debug(zip.files);
+          console.log("zip files : ", zip.files);
 
           await Promise.all(
             Object.keys(zip.files).map(async (filepath) => {
@@ -238,16 +236,9 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
                 const moduleBase64 = await readFile(new File([content], filepath));
                 log.debug(`moduleBase64=${moduleBase64}`);
 
-                const moduleNameHex = Buffer.from(
-                  FileUtil.extractFilenameWithoutExtension(filepath),
-                ).toString('hex');
-                const order = metaDataHex.indexOf(moduleNameHex);
-
                 moduleWrappers.push({
                   path: filepath,
                   module: moduleBase64,
-                  moduleNameHex: moduleNameHex,
-                  order: order,
                 });
 
                 try {
@@ -263,18 +254,17 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
               }
             }),
           );
-          moduleWrappers = _.orderBy(moduleWrappers, (mw) => mw.order);
+
           log.info('@@@ moduleWrappers', moduleWrappers);
 
           setModuleBase64s([...moduleWrappers.map((mw) => mw.module)]);
           setFileNames([...filenames]);
-          setMetaDataBase64(metaData64);
 
           socket.disconnect();
           setLoading(false);
         },
       );
-
+      
       const formData = new FormData();
       formData.append('address', address || 'noaddress');
       formData.append('timestamp', timestamp.toString() || '0');
@@ -404,12 +394,11 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
 
   const entry = async () => {
     // remove signer param
-    let param = parameters;
+    const param = parameters;
     if (param.length >= 1 && param[0] === undefined) {
       param.shift();
     }
 
-    console.log(param);
     const chainId = dapp.networks.aptos.chain;
     const abiBuilderConfig = {
       sender: accountID,
@@ -490,25 +479,17 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
       return [];
     }
 
-    let metaDataHex = '';
-    let filenames: string[] = [];
-    let moduleWrappers: ModuleWrapper[] = [];
+    const filenames: string[] = [];
+    const moduleWrappers: ModuleWrapper[] = [];
 
     await Promise.all(
       artifactPaths.map(async (path) => {
         if (getExtensionOfFilename(path) === '.mv') {
-          let moduleBase64 = await client?.fileManager.readFile('browser/' + path);
+          const moduleBase64 = await client?.fileManager.readFile('browser/' + path);
           if (moduleBase64) {
-            const moduleNameHex = Buffer.from(
-              FileUtil.extractFilenameWithoutExtension(path),
-            ).toString('hex');
-            const order = metaDataHex.indexOf(moduleNameHex);
-
             moduleWrappers.push({
               path: path,
               module: moduleBase64,
-              moduleNameHex: moduleNameHex,
-              order: order,
             });
           }
           filenames.push(path);
@@ -516,7 +497,6 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
       }),
     );
 
-    moduleWrappers = _.orderBy(moduleWrappers, (mw) => mw.order);
     log.debug('@@@ moduleWrappers', moduleWrappers);
 
     setFileNames([...filenames]);
@@ -559,9 +539,10 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
 
     const blob = await generateZip(projFiles);
     if (!blob) {
+      console.log("no generate zip blob")
       return;
     }
-
+    console.log("generate zip blob", blob)
     await wrappedCompile(blob);
   };
 
@@ -600,11 +581,11 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
         )}
       </div>
       <hr />
-      {metaData64 ? (
+      {/* { readyDeploy ? (
         <Deploy
           wallet={'Dsrv'}
           accountID={accountID}
-          metaData64={metaData64}
+          // metaData64={metaData64}
           moduleBase64s={moduleBase64s}
           dapp={dapp}
           client={client}
@@ -619,7 +600,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
         <p className="text-center" style={{ marginTop: '0px !important', marginBottom: '3px' }}>
           <small>NO COMPILED CONTRACT</small>
         </p>
-      )}
+      )} */}
       <p className="text-center" style={{ marginTop: '5px !important', marginBottom: '5px' }}>
         <small>OR</small>
       </p>

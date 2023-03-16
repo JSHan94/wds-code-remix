@@ -28,10 +28,10 @@ export const Connect: React.FunctionComponent<InterfaceProps> = ({ client, activ
           if (!window.initia) {
             await client.terminal.log({
               value:
-                'Please Install WELLDONE Wallet http://abit.ly/install-welldone-wallet . If you have installed it, please press the refresh button.',
+                'Please Install Initia Wallet. If you have installed it, please press the refresh button.',
               type: 'error',
             });
-            setError('Install WELLDONE Wallet');
+            setError('Install INITIA Wallet');
           } else {
             console.log("wallet connect success!")
             setActive(true);

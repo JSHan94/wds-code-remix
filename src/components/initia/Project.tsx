@@ -122,7 +122,7 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
     const res = await axios.request({
       method: 'GET',
       url:
-        `${COMPILER_API_ENDPOINT}/s3Proxy?bucket=code-template&fileKey=aptos/` + template + '.zip',
+        `https://dev.compiler.welldonestudio.io/s3Proxy?bucket=code-template&fileKey=aptos/` + template + '.zip',
       responseType: 'arraybuffer',
       responseEncoding: 'null',
     });
