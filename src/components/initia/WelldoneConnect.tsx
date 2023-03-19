@@ -25,6 +25,7 @@ export const WelldoneConnect: React.FunctionComponent<InterfaceProps> = ({
   client,
   active,
   account,
+  setDapp,
   setAccount,
   setActive,
 }) => {
@@ -32,6 +33,7 @@ export const WelldoneConnect: React.FunctionComponent<InterfaceProps> = ({
   const [error, setError] = useState<String>('');
 
   const dappProvider = window.initia;
+  setDapp(dappProvider);
 
   // Establish a connection to the Aptos blockchain on component mount
   useEffect(() => {

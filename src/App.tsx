@@ -22,13 +22,11 @@ export const App: React.FunctionComponent = () => {
       setConnection(true);
     };
     if (!connection) init();
-    log.debug(`%cẅël̈l̈c̈öm̈ë-̈ẗö-̈ẅël̈l̈d̈ön̈ë-̈c̈öd̈ë!̈`, 'color:yellow');
   }, []);
 
   return (
     
     <div className="App">
-      <>hello world </>
       <Container>{client && <Main client={client} />}</Container>
     </div>
   );

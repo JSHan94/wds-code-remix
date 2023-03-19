@@ -61,7 +61,7 @@ export const ChainConnectContainer: FunctionComponent<InterfaceProps> = ({
 
   const ChainConnect = (props: { chain: string }) => {
     switch (props.chain) {
-      case 'Aptos':
+      case 'Initia':
         return <InitiaConnect client={client} />;
       default:
         return <></>;

@@ -3,7 +3,7 @@ export default async function wrapPromise(promise: Promise<any>, client: any) {
   let result: any;
   // await client?.terminal.log('Loading...');
 
-  let suspender = promise.then(
+  const suspender = promise.then(
     async (r) => {
       // await client?.terminal.log('Success!');
       status = 'success';

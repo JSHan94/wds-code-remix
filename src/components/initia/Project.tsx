@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Form, InputGroup } from 'react-bootstrap';
 import { FaSyncAlt } from 'react-icons/fa';
-
 import { Compiler } from './Compiler';
 
 import axios from 'axios';
@@ -9,6 +8,7 @@ import JSZip from 'jszip';
 import wrapPromise from '../../utils/wrapPromise';
 import { sendCustomEvent } from '../../utils/sendCustomEvent';
 import { COMPILER_API_ENDPOINT } from '../../const/endpoint';
+import { PROJECT_NAME } from '../../const';
 import { Client } from '@remixproject/plugin';
 import { Api } from '@remixproject/plugin-utils';
 import { IRemixApi } from '@remixproject/plugin-api';
@@ -27,11 +27,11 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
   dapp,
   client,
 }) => {
-  const [projectName, setProjectName] = useState<string>('noname');
+  const [projectName, setProjectName] = useState<string>('basic-coin');
   const [projectList, setProjectList] = useState<string[]>([]);
   const [compileTarget, setCompileTarget] = useState<string>('');
-  const [template, setTemplate] = useState<string>('hello_blockchain');
-  const templateList = ['hello_blockchain', 'ticket', 'hello_prover', 'marketplace'];
+  const [template, setTemplate] = useState<string>('basic-coin');
+  const templateList = ['basic-coin', 'dex', 'nft-controller', 'math', 'liquid-staking'];
 
   useEffect(() => {
     getList();
@@ -59,19 +59,19 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
 
   const createProject = async () => {
     sendCustomEvent('new_project', {
-      event_category: 'aptos',
+      event_category: PROJECT_NAME,
       method: 'new_project',
     });
     if (await wrappedIsExists(projectName)) {
       await client.terminal.log({
         type: 'error',
-        value: 'The folder "aptos/' + projectName + '" already exists',
+        value: 'The folder "initia/' + projectName + '" already exists',
       });
       return;
     }
 
     try {
-      const path = 'browser/aptos/' + projectName;
+      const path = `browser/${PROJECT_NAME}/${projectName}`;
       await client?.fileManager.mkdir(path + '/sources');
       await client?.fileManager.writeFile(path + '/Move.toml', '');
       wrappedGetList();
@@ -83,7 +83,7 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
 
   const getProjectList = async () => {
     try {
-      const list = await client?.fileManager.readdir('browser/aptos/');
+      const list = await client?.fileManager.readdir('browser/initia/');
       return Object.keys(list || []);
     } catch (e) {
       log.error(e);
@@ -95,7 +95,7 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
 
   const isExists = async (dir: string) => {
     try {
-      log.debug(await client.fileManager.readdir('browser/aptos/' + dir));
+      log.debug(await client.fileManager.readdir('browser/initia/' + dir));
       return true;
     } catch (e) {
       log.error(e);
@@ -107,14 +107,14 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
 
   const createTemplate = async () => {
     sendCustomEvent('create_template', {
-      event_category: 'aptos',
+      event_category: PROJECT_NAME,
       method: 'create_template',
     });
 
     if (await wrappedIsExists(template)) {
       await client.terminal.log({
         type: 'error',
-        value: `The folder "aptos/${template} already exists`,
+        value: `The folder "initia/${template} already exists`,
       });
       return;
     }
@@ -122,7 +122,7 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
     const res = await axios.request({
       method: 'GET',
       url:
-        `https://dev.compiler.welldonestudio.io/s3Proxy?bucket=code-template&fileKey=aptos/` + template + '.zip',
+        `${COMPILER_API_ENDPOINT}/s3Proxy?bucket=initia-code-template&fileKey=${template}.zip`,
       responseType: 'arraybuffer',
       responseEncoding: 'null',
     });
@@ -135,10 +135,10 @@ export const Project: React.FunctionComponent<InterfaceProps> = ({
       Object.keys(zip.files).map(async (key) => {
         log.debug(`@@@ key=${key}`);
         if (zip.files[key].dir) {
-          await client?.fileManager.mkdir('browser/aptos/' + key);
+          await client?.fileManager.mkdir(`browser/${PROJECT_NAME}/${key}`);
         } else if (!key.startsWith('_') && key !== template + '/.DS_Store') {
           content = await zip.file(key)?.async('string');
-          await client?.fileManager.writeFile('browser/aptos/' + key, content);
+          await client?.fileManager.writeFile('browser/initia/' + key, content);
         }
       });
       await wrappedGetList();

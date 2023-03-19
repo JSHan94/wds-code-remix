@@ -30,12 +30,13 @@ import { Client } from '@remixproject/plugin';
 import { Api } from '@remixproject/plugin-utils';
 import { IRemixApi } from '@remixproject/plugin-api';
 import { log } from '../../utils/logger';
-import { build, getAccountModules, getAccountResources, viewFunction } from './aptos-helper';
+import { build, getAccountModules, getAccountResources, viewFunction } from './initia-helper';
 
 import { PROD, STAGE } from '../../const/stage';
 import { Socket } from 'socket.io-client/build/esm/socket';
 import { isEmptyList, isNotEmptyList } from '../../utils/ListUtil';
 import { Types } from 'aptos';
+import { PROJECT_NAME } from '../../const';
 
 interface ModuleWrapper {
   path: string;
@@ -130,7 +131,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
   const sendCompileReq = async (blob: Blob) => {
     setCompileError(null);
     sendCustomEvent('compile', {
-      event_category: 'aptos',
+      event_category: PROJECT_NAME,
       method: 'compile',
     });
     setLoading(true);
@@ -160,12 +161,8 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
       socket.on(
         COMPILER_APTOS_COMPILE_ERROR_OCCURRED_V1,
         async (data: CompilerAptosCompileErrorOccurredV1) => {
-          log.debug(
-            `${RCV_EVENT_LOG_PREFIX} ${COMPILER_APTOS_COMPILE_ERROR_OCCURRED_V1} data=${stringify(
-              data,
-            )}`,
-          );
           if (data.compileId !== compileId(address, timestamp)) {
+            await client.terminal.log({ value: "Provide wrong compile id", type: 'error' });
             return;
           }
           await client.terminal.log({ value: stripAnsi(data.errMsg), type: 'error' });
@@ -183,7 +180,6 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
         if (data.compileId !== compileId(address, timestamp)) {
           return;
         }
-
         await client.terminal.log({ value: stripAnsi(data.logMsg), type: 'info' });
       });
 
@@ -204,14 +200,11 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
           const fileKey = `${address}/${timestamp}/out_${address}_${timestamp}_move.zip`;
           const res = await axios.request({
             method: 'GET',
-            url: `${COMPILER_API_ENDPOINT}/s3Proxy?fileKey=${fileKey}`,
+            url: `${COMPILER_API_ENDPOINT}/s3Proxy?bucket=initia-remix-s3&fileKey=${fileKey}`,
             responseType: 'arraybuffer',
             responseEncoding: 'null',
           });
-          const cc  = res.data as Uint8Array
-          console.log("SIBONG1 res.data : ",cc.toString() , " fileKey : ", fileKey);
           const zip = await new JSZip().loadAsync(res.data);
-          console.log("SIBONG2")
           try {
             await client?.fileManager.mkdir('browser/' + compileTarget + '/out');
           } catch (e) {
@@ -219,15 +212,13 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
             setLoading(false);
             return;
           }
-          console.log("SIBONG3")
 
           const filenames: string[] = [];
           const moduleWrappers: ModuleWrapper[] = [];
 
-          console.log("zip files : ", zip.files);
-
           await Promise.all(
             Object.keys(zip.files).map(async (filepath) => {
+              console.log("file path : ", filepath)
               if (filepath.match('\\w+\\/bytecode_modules\\/\\w+.mv')) {
                 const moduleDataBuf = await zip.file(filepath)?.async('nodebuffer');
                 log.debug(`moduleDataBuf=${moduleDataBuf?.toString('hex')}`);
@@ -333,7 +324,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
 
   const getContractAtAddress = async () => {
     sendCustomEvent('at_address', {
-      event_category: 'aptos',
+      event_category: PROJECT_NAME,
       method: 'at_address',
     });
     setDeployedContract(atAddress);
@@ -497,8 +488,6 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
       }),
     );
 
-    log.debug('@@@ moduleWrappers', moduleWrappers);
-
     setFileNames([...filenames]);
     setModuleBase64s([...moduleWrappers.map((m) => m.module)]);
 
@@ -507,12 +496,15 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
 
   const requestCompile = async () => {
     if (loading) {
-      await client.terminal.log({ value: 'Server is working...', type: 'log' });
+      await client.terminal.log({ value: 'Server is working...', type: 'info' });
       return;
     }
 
+    // check /out folder exist
     const moduleFiles = await prepareModules();
-    if (isNotEmptyList(moduleFiles)) {
+    const projFiles = await FileUtil.allFilesForBrowser(client, compileTarget);
+    const existsOutFolder = projFiles.find((f) => f.path.startsWith(`${compileTarget}/out`));
+    if (isNotEmptyList(moduleFiles) || existsOutFolder) {
       await client.terminal.log({
         type: 'error',
         value:
@@ -520,29 +512,20 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
       });
       return;
     }
-
-    const projFiles = await FileUtil.allFilesForBrowser(client, compileTarget);
-    log.info(`@@@ compile projFiles`, projFiles);
+    
     if (isEmptyList(projFiles)) {
-      return;
-    }
-
-    const existsOutFolder = projFiles.find((f) => f.path.startsWith(`${compileTarget}/out`));
-    if (existsOutFolder) {
       await client.terminal.log({
         type: 'error',
         value:
-          "If you want to run a new compilation, delete the 'out' directory and click the Compile button again.",
+         "No files found in the project. Please add a file to the project and try again."
       });
       return;
     }
 
     const blob = await generateZip(projFiles);
     if (!blob) {
-      console.log("no generate zip blob")
       return;
     }
-    console.log("generate zip blob", blob)
     await wrappedCompile(blob);
   };
 
@@ -581,11 +564,10 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
         )}
       </div>
       <hr />
-      {/* { readyDeploy ? (
+      {  
         <Deploy
           wallet={'Dsrv'}
           accountID={accountID}
-          // metaData64={metaData64}
           moduleBase64s={moduleBase64s}
           dapp={dapp}
           client={client}
@@ -596,7 +578,8 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
           setParameters={setParameters}
           getAccountModulesFromAccount={getAccountModulesFromAccount}
         />
-      ) : (
+      }
+      {/* : (
         <p className="text-center" style={{ marginTop: '0px !important', marginBottom: '3px' }}>
           <small>NO COMPILED CONTRACT</small>
         </p>
