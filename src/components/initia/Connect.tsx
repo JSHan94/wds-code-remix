@@ -18,7 +18,7 @@ export const Connect: React.FunctionComponent<InterfaceProps> = ({ client }) => 
 
   return (
     <div>
-      <CommonConnect client={client} active={active} setActive={setActive} chain={'aptos'} setWallet={setWallet} wallet={wallet} />
+      <CommonConnect client={client} active={active} setActive={setActive} setWallet={setWallet} wallet={wallet} />
       <hr />
       <div>
         <WelldoneConnect

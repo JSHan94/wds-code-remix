@@ -1,10 +1,6 @@
 import { Badge, Form, ListGroup } from 'react-bootstrap';
 
-import Aptos from '../assets/Aptos-Big.png';
-import Near from '../assets/Near-Big.png';
-import Celo from '../assets/Celo-Big.png';
-import Juno from '../assets/Juno-Big.png';
-import Klaytn from '../assets/Klaytn-Big.png';
+import Initia from '../assets/initia_white.png';
 import RefreshButton from './common/RefreshButton';
 import { FunctionComponent } from 'react';
 import { EditorClient } from '../utils/editor';
@@ -43,14 +39,14 @@ export const ChainSelectButtonContainer: FunctionComponent<InterfaceProps> = ({
             as="li"
             action
             onClick={() => {
-              setChain('Aptos');
+              setChain('Initia');
             }}
           >
-            <img src={Aptos} style={{ width: '35px', marginRight: '20px' }} alt="Aptos logo" />
+            <img src={Initia} style={{ width: '35px', marginRight: '20px' }} alt="Initia logo" />
             <b>INITIA</b>
-            <Badge bg="danger" style={{ position: 'absolute', right: '10px', top: '20px' }}>
+            {/* <Badge bg="danger" style={{ position: 'absolute', right: '10px', top: '20px' }}>
               Beta
-            </Badge>
+            </Badge> */}
           </ListGroup.Item>
         </ListGroup>
       </Form.Group>

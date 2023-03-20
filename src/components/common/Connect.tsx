@@ -10,37 +10,35 @@ interface InterfaceProps {
   client: Client<Api, Readonly<IRemixApi>>;
   active: boolean;
   setActive: Dispatch<React.SetStateAction<boolean>>;
-  chain: string;
   setWallet: Function;
   wallet: string;
 }
 
-export const Connect: React.FunctionComponent<InterfaceProps> = ({ client, active, setActive, chain, setWallet, wallet }) => {
+export const Connect: React.FunctionComponent<InterfaceProps> = ({ client, active, setActive, setWallet, wallet }) => {
   const [error, setError] = useState<string>('');
   return (
     <ListGroup>
       <ListGroup.Item
         as="li"
         action
-        active={active && (wallet === 'welldone')}
+        active={active && (wallet === 'initia')}
         onClick={async () => {
-          console.log("clicked ! ", window.initia)
           if (!window.initia) {
             await client.terminal.log({
               value:
-                'Please Install WELLDONE Wallet http://abit.ly/install-welldone-wallet . If you have installed it, please press the refresh button.',
+                'Please Install Initia Wallet. If you have installed it, please press the refresh button.',
               type: 'error',
             });
-            setError('Install WELLDONE Wallet');
+            setError('Install INITIA Wallet');
           } else {
             console.log("wallet connect success!")
             setActive(true);
-            setWallet('welldone')
+            setWallet('initia')
           }
         }}
       >
         <img src={Welldone} style={{ width: '25px', marginRight: '10px' }} alt="WELLDONE logo" />
-        <b>Connect to WELLDONE</b>
+        <b>Connect to INITIA</b>
       </ListGroup.Item>
       <Alert style={{ marginTop: '10px' }} variant="danger" hidden={error === ''}>
         <AlertCloseButton onClick={() => setError('')} />

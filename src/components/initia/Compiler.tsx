@@ -30,18 +30,17 @@ import { Client } from '@remixproject/plugin';
 import { Api } from '@remixproject/plugin-utils';
 import { IRemixApi } from '@remixproject/plugin-api';
 import { log } from '../../utils/logger';
-import { build, getAccountModules, getAccountResources, viewFunction } from './aptos-helper';
+import { build, getAccountModules, getAccountResources, viewFunction } from './initia-helper';
 
 import { PROD, STAGE } from '../../const/stage';
 import { Socket } from 'socket.io-client/build/esm/socket';
 import { isEmptyList, isNotEmptyList } from '../../utils/ListUtil';
 import { Types } from 'aptos';
+import { PROJECT_NAME } from '../../const';
 
 interface ModuleWrapper {
   path: string;
   module: string;
-  moduleNameHex: string;
-  order: number;
 }
 
 const RCV_EVENT_LOG_PREFIX = `[==> EVENT_RCV]`;
@@ -68,7 +67,6 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
   const [deployedContract, setDeployedContract] = useState<string>('');
 
   const [moduleBase64s, setModuleBase64s] = useState<string[]>([]);
-  const [metaData64, setMetaDataBase64] = useState<string>('');
 
   const [modules, setModules] = useState<any[]>([]);
   const [targetModule, setTargetModule] = useState<string>('');
@@ -129,10 +127,11 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
     return zip.generateAsync({ type: 'blob' });
   };
 
+
   const sendCompileReq = async (blob: Blob) => {
     setCompileError(null);
     sendCustomEvent('compile', {
-      event_category: 'aptos',
+      event_category: PROJECT_NAME,
       method: 'compile',
     });
     setLoading(true);
@@ -162,12 +161,8 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
       socket.on(
         COMPILER_APTOS_COMPILE_ERROR_OCCURRED_V1,
         async (data: CompilerAptosCompileErrorOccurredV1) => {
-          log.debug(
-            `${RCV_EVENT_LOG_PREFIX} ${COMPILER_APTOS_COMPILE_ERROR_OCCURRED_V1} data=${stringify(
-              data,
-            )}`,
-          );
           if (data.compileId !== compileId(address, timestamp)) {
+            await client.terminal.log({ value: "Provide wrong compile id", type: 'error' });
             return;
           }
           await client.terminal.log({ value: stripAnsi(data.errMsg), type: 'error' });
@@ -185,7 +180,6 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
         if (data.compileId !== compileId(address, timestamp)) {
           return;
         }
-
         await client.terminal.log({ value: stripAnsi(data.logMsg), type: 'info' });
       });
 
@@ -203,15 +197,13 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
             return;
           }
 
-          const bucket = 'remix-initia';
           const fileKey = `${address}/${timestamp}/out_${address}_${timestamp}_move.zip`;
           const res = await axios.request({
             method: 'GET',
-            url: `${COMPILER_API_ENDPOINT}/s3Proxy?bucket=${bucket}&fileKey=${fileKey}`,
+            url: `${COMPILER_API_ENDPOINT}/s3Proxy?bucket=initia-remix-s3&fileKey=${fileKey}`,
             responseType: 'arraybuffer',
             responseEncoding: 'null',
           });
-
           const zip = await new JSZip().loadAsync(res.data);
           try {
             await client?.fileManager.mkdir('browser/' + compileTarget + '/out');
@@ -221,15 +213,12 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
             return;
           }
 
-          let metaData64 = '';
-          let metaDataHex = '';
-          let filenames: string[] = [];
-          let moduleWrappers: ModuleWrapper[] = [];
-
-          log.debug(zip.files);
+          const filenames: string[] = [];
+          const moduleWrappers: ModuleWrapper[] = [];
 
           await Promise.all(
             Object.keys(zip.files).map(async (filepath) => {
+              console.log("file path : ", filepath)
               if (filepath.match('\\w+\\/bytecode_modules\\/\\w+.mv')) {
                 const moduleDataBuf = await zip.file(filepath)?.async('nodebuffer');
                 log.debug(`moduleDataBuf=${moduleDataBuf?.toString('hex')}`);
@@ -238,16 +227,9 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
                 const moduleBase64 = await readFile(new File([content], filepath));
                 log.debug(`moduleBase64=${moduleBase64}`);
 
-                const moduleNameHex = Buffer.from(
-                  FileUtil.extractFilenameWithoutExtension(filepath),
-                ).toString('hex');
-                const order = metaDataHex.indexOf(moduleNameHex);
-
                 moduleWrappers.push({
                   path: filepath,
                   module: moduleBase64,
-                  moduleNameHex: moduleNameHex,
-                  order: order,
                 });
 
                 try {
@@ -263,18 +245,17 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
               }
             }),
           );
-          moduleWrappers = _.orderBy(moduleWrappers, (mw) => mw.order);
+
           log.info('@@@ moduleWrappers', moduleWrappers);
 
           setModuleBase64s([...moduleWrappers.map((mw) => mw.module)]);
           setFileNames([...filenames]);
-          setMetaDataBase64(metaData64);
 
           socket.disconnect();
           setLoading(false);
         },
       );
-
+      
       const formData = new FormData();
       formData.append('address', address || 'noaddress');
       formData.append('timestamp', timestamp.toString() || '0');
@@ -343,7 +324,7 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
 
   const getContractAtAddress = async () => {
     sendCustomEvent('at_address', {
-      event_category: 'aptos',
+      event_category: PROJECT_NAME,
       method: 'at_address',
     });
     setDeployedContract(atAddress);
@@ -404,12 +385,11 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
 
   const entry = async () => {
     // remove signer param
-    let param = parameters;
+    const param = parameters;
     if (param.length >= 1 && param[0] === undefined) {
       param.shift();
     }
 
-    console.log(param);
     const chainId = dapp.networks.aptos.chain;
     const abiBuilderConfig = {
       sender: accountID,
@@ -490,34 +470,23 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
       return [];
     }
 
-    let metaDataHex = '';
-    let filenames: string[] = [];
-    let moduleWrappers: ModuleWrapper[] = [];
+    const filenames: string[] = [];
+    const moduleWrappers: ModuleWrapper[] = [];
 
     await Promise.all(
       artifactPaths.map(async (path) => {
         if (getExtensionOfFilename(path) === '.mv') {
-          let moduleBase64 = await client?.fileManager.readFile('browser/' + path);
+          const moduleBase64 = await client?.fileManager.readFile('browser/' + path);
           if (moduleBase64) {
-            const moduleNameHex = Buffer.from(
-              FileUtil.extractFilenameWithoutExtension(path),
-            ).toString('hex');
-            const order = metaDataHex.indexOf(moduleNameHex);
-
             moduleWrappers.push({
               path: path,
               module: moduleBase64,
-              moduleNameHex: moduleNameHex,
-              order: order,
             });
           }
           filenames.push(path);
         }
       }),
     );
-
-    moduleWrappers = _.orderBy(moduleWrappers, (mw) => mw.order);
-    log.debug('@@@ moduleWrappers', moduleWrappers);
 
     setFileNames([...filenames]);
     setModuleBase64s([...moduleWrappers.map((m) => m.module)]);
@@ -527,12 +496,15 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
 
   const requestCompile = async () => {
     if (loading) {
-      await client.terminal.log({ value: 'Server is working...', type: 'log' });
+      await client.terminal.log({ value: 'Server is working...', type: 'info' });
       return;
     }
 
+    // check /out folder exist
     const moduleFiles = await prepareModules();
-    if (isNotEmptyList(moduleFiles)) {
+    const projFiles = await FileUtil.allFilesForBrowser(client, compileTarget);
+    const existsOutFolder = projFiles.find((f) => f.path.startsWith(`${compileTarget}/out`));
+    if (isNotEmptyList(moduleFiles) || existsOutFolder) {
       await client.terminal.log({
         type: 'error',
         value:
@@ -540,19 +512,12 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
       });
       return;
     }
-
-    const projFiles = await FileUtil.allFilesForBrowser(client, compileTarget);
-    log.info(`@@@ compile projFiles`, projFiles);
+    
     if (isEmptyList(projFiles)) {
-      return;
-    }
-
-    const existsOutFolder = projFiles.find((f) => f.path.startsWith(`${compileTarget}/out`));
-    if (existsOutFolder) {
       await client.terminal.log({
         type: 'error',
         value:
-          "If you want to run a new compilation, delete the 'out' directory and click the Compile button again.",
+         "No files found in the project. Please add a file to the project and try again."
       });
       return;
     }
@@ -561,7 +526,6 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
     if (!blob) {
       return;
     }
-
     await wrappedCompile(blob);
   };
 
@@ -600,11 +564,10 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
         )}
       </div>
       <hr />
-      {metaData64 ? (
+      {  
         <Deploy
           wallet={'Dsrv'}
           accountID={accountID}
-          metaData64={metaData64}
           moduleBase64s={moduleBase64s}
           dapp={dapp}
           client={client}
@@ -615,11 +578,12 @@ export const Compiler: React.FunctionComponent<InterfaceProps> = ({
           setParameters={setParameters}
           getAccountModulesFromAccount={getAccountModulesFromAccount}
         />
-      ) : (
+      }
+      {/* : (
         <p className="text-center" style={{ marginTop: '0px !important', marginBottom: '3px' }}>
           <small>NO COMPILED CONTRACT</small>
         </p>
-      )}
+      )} */}
       <p className="text-center" style={{ marginTop: '5px !important', marginBottom: '5px' }}>
         <small>OR</small>
       </p>

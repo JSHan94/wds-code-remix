@@ -12,7 +12,7 @@ export class EditorClient {
   }
 
   getFile = async (name: string) => {
-    let path = name.startsWith('./') ? name.substr(2) : name;
+    const path = name.startsWith('./') ? name.substr(2) : name;
     return this.client.call('fileManager', 'getFile', this.getBrowserPath(path));
   };
 

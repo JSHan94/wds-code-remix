@@ -6,15 +6,19 @@ import { Client } from '@remixproject/plugin';
 import { Api } from '@remixproject/plugin-utils';
 import { IRemixApi } from '@remixproject/plugin-api';
 import { log } from '../../utils/logger';
-import { genRawTx, getAccountResources, waitForTransactionWithResult } from './aptos-helper';
+import { genRawTx, getAccountResources, waitForTransactionWithResult } from './initia-helper';
+import { MsgPublish } from '@initia/initia.js'
+import { MsgPublish as MsgPublishProto } from "@initia/initia.proto/initia/move/v1/tx"
+import { SigningStargateClient } from "@cosmjs/stargate"
+import { TxRaw } from "cosmjs-types/cosmos/tx/v1beta1/tx"
+import {PROJECT_NAME} from '../../const'
 
 import copy from 'copy-to-clipboard';
 import { isNotEmptyList } from '../../utils/ListUtil';
 
-interface InterfaceProps {
+interface DeployProps {
   wallet: string;
   accountID: string;
-  metaData64: string;
   moduleBase64s: string[];
   dapp: any;
   client: Client<Api, Readonly<IRemixApi>>;
@@ -26,10 +30,9 @@ interface InterfaceProps {
   getAccountModulesFromAccount: Function;
 }
 
-export const Deploy: React.FunctionComponent<InterfaceProps> = ({
+export const Deploy: React.FunctionComponent<DeployProps> = ({
   client,
   accountID,
-  metaData64,
   moduleBase64s,
   wallet,
   dapp,
@@ -55,12 +58,8 @@ export const Deploy: React.FunctionComponent<InterfaceProps> = ({
       throw new Error('No accountID');
     }
 
-    if (wallet !== 'Dsrv') {
-      throw new Error('Wallet is not Dsrv');
-    }
-
-    if (!(metaData64 && moduleBase64s.length > 0)) {
-      throw new Error('Not prepared metadata and module');
+    if (!(moduleBase64s.length > 0)) {
+      throw new Error('Not prepared module');
     }
 
     await dsrvProceed();
@@ -69,7 +68,7 @@ export const Deploy: React.FunctionComponent<InterfaceProps> = ({
   const dsrvProceed = async () => {
     setInProgress(true);
     sendCustomEvent('deploy', {
-      event_category: 'aptos',
+      event_category: PROJECT_NAME,
       method: 'deploy',
     });
 
@@ -79,13 +78,18 @@ export const Deploy: React.FunctionComponent<InterfaceProps> = ({
 
     try {
       setDeployIconSpin('fa-spin');
-      const chainId = dapp.networks.aptos.chain;
-      const rawTx_ = await genRawTx(metaData64, moduleBase64s, accountID, chainId, 20000, 100);
-      const txnHash = await dapp.request('aptos', {
-        method: 'dapp:signAndSendTransaction',
-        params: [rawTx_],
-      });
-      log.debug(`@@@ txnHash=${txnHash}`);
+
+      const msg = new MsgPublish(accountID, moduleBase64s, 0)
+      const messages = [
+        {
+          typeUrl: msg.toData()["@type"],
+          value: msg.toProto(),
+        }
+      ]
+      const memo = "test deploy"
+      const { transactionHash } = await dapp.signAndBroadcast({ messages, memo })
+      await client.terminal.log({ value: "Deploy Success: " + transactionHash, type: 'info'  });
+      setDeployedContract(accountID);
 
       /**
        * Config for creating raw transactions.
@@ -99,39 +103,39 @@ export const Deploy: React.FunctionComponent<InterfaceProps> = ({
       //   chainId: Uint8 | string;
       // }
 
-      const result = (await waitForTransactionWithResult(txnHash, chainId)) as any;
-      log.debug(result);
-      if (result.success) {
-        await client.terminal.log({
-          type: 'info',
-          value: {
-            version: result.version,
-            hash: result.hash,
-            gas_unit_price: result.gas_unit_price,
-            gas_used: result.gas_used,
-            sender: result.sender,
-            sequence_number: result.sequence_number,
-            timestamp: result.timestamp,
-            vm_status: result.vm_status,
-          },
-        });
-        setDeployedContract(accountID);
-        setAtAddress('');
-        const moveResources = await getAccountResources(accountID, dapp.networks.aptos.chain);
-        log.info(`@@@ moveResources`, moveResources);
-        setAccountResources([...moveResources]);
-        if (isNotEmptyList(moveResources)) {
-          setTargetResource(moveResources[0].type);
-        } else {
-          setTargetResource('');
-        }
-        setParameters([]);
+      // const result = (await waitForTransactionWithResult(txnHash, chainId)) as any;
+      // log.debug(result);
+      // if (result.success) {
+      //   await client.terminal.log({
+      //     type: 'info',
+      //     value: {
+      //       version: result.version,
+      //       hash: result.hash,
+      //       gas_unit_price: result.gas_unit_price,
+      //       gas_used: result.gas_used,
+      //       sender: result.sender,
+      //       sequence_number: result.sequence_number,
+      //       timestamp: result.timestamp,
+      //       vm_status: result.vm_status,
+      //     },
+      //   });
+      //   setDeployedContract(accountID);
+      //   setAtAddress('');
+      //   const moveResources = await getAccountResources(accountID, dapp.networks.aptos.chain);
+      //   log.info(`@@@ moveResources`, moveResources);
+      //   setAccountResources([...moveResources]);
+      //   if (isNotEmptyList(moveResources)) {
+      //     setTargetResource(moveResources[0].type);
+      //   } else {
+      //     setTargetResource('');
+      //   }
+      //   setParameters([]);
 
-        getAccountModulesFromAccount(accountID, dapp.networks.aptos.chain);
-      } else {
-        log.error((result as any).vm_status);
-        await client.terminal.log({ type: 'error', value: (result as any).vm_status });
-      }
+      //   getAccountModulesFromAccount(accountID, dapp.networks.aptos.chain);
+      // } else {
+      //   log.error((result as any).vm_status);
+      //   await client.terminal.log({ type: 'error', value: (result as any).vm_status });
+      // }
     } catch (e: any) {
       log.error(e);
       await client.terminal.log({ type: 'error', value: e?.message?.toString() });
@@ -159,7 +163,7 @@ export const Deploy: React.FunctionComponent<InterfaceProps> = ({
       <div className="d-grid gap-2">
         <Button
           variant="warning"
-          disabled={inProgress || !metaData64}
+          disabled={inProgress}
           onClick={async () => {
             try {
               await checkExistContract();
