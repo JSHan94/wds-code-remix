@@ -79,22 +79,18 @@ export const Deploy: React.FunctionComponent<DeployProps> = ({
     try {
       setDeployIconSpin('fa-spin');
 
+      const msg = new MsgPublish(accountID, moduleBase64s, 0)
       const messages = [
         {
-          typeUrl: "/initia.move.v1.MsgPublish",
-          value: MsgPublish.fromData({
-            '@type': '/initia.move.v1.MsgPublish',
-            sender: accountID,
-            code_bytes: moduleBase64s,
-            upgrade_policy: 0
-          }),
+          typeUrl: msg.toData()["@type"],
+          value: msg.toProto(),
         }
       ]
       const memo = "test deploy"
       const { transactionHash } = await dapp.signAndBroadcast({ messages, memo })
       await client.terminal.log({ value: "Deploy Success: " + transactionHash, type: 'info'  });
       setDeployedContract(accountID);
-      
+
       /**
        * Config for creating raw transactions.
        */
